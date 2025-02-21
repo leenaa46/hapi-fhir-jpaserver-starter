@@ -1,0 +1,49 @@
+name: Build and Deploy to Dev Server
+
+on:
+  push:
+    branches:
+      - dev-release
+  pull_request:
+    branches:
+      - dev-release
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Deploy using Rsync
+      - name: Deploy using Rsync
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete --exclude="/assets" --exclude="/storage"
+          path: "./"
+          remote_path: "/var/www/hapi-server"
+          remote_host: ${{ secrets.DEV_HOST }}
+          remote_user: root
+          remote_key: ${{ secrets.DEV_DEPLOYMENT_KEY }}
+
+      # Step 3: SSH into Server and Start Application with PM2
+      - name: Start Application with PM2
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: root
+          key: ${{ secrets.DEV_DEPLOYMENT_KEY }}
+          script: |
+            cd /var/www/hapi-server
+            echo "AUTH0_CLIENT_ID=${{ secrets.AUTH0_CLIENT_ID }}" >> .env
+            echo "AUTH0_CLIENT_SECRET=${{ secrets.AUTH0_CLIENT_SECRET }}" >> .env
+            echo "OAUTH2_COOKIE_SECRET=${{ secrets.OAUTH2_COOKIE_SECRET }}" >> .env
+            echo "AUTH0_ISSUER_URL=${{ secrets.AUTH0_ISSUER_URL }}" >> .env
+            echo "AUTH0_REDIRECT_URL=${{ secrets.AUTH0_REDIRECT_URL }}" >> .env
+            echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            docker compose up -d --build
+            docker compose ps
+
