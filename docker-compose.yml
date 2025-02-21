@@ -1,5 +1,28 @@
 version: "3"
+
 services:
+  auth-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: oauth2-proxy
+    restart: on-failure
+
+    ports:
+      # Host:Port -> Container:Port
+      - "8080:4180"
+
+    environment:
+      OAUTH2_PROXY_PROVIDER: "oidc"
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"     # <--- Force binding
+      OAUTH2_PROXY_CLIENT_ID: "HIev5cLjNOtRr6KlHw1xdjywTcBs2RLa"
+      OAUTH2_PROXY_CLIENT_SECRET: "Rdn8iEa1bzGrwhb1X0JwdUsfn26RDrMPLV1PYXvWAtw4pmLhPR0qbzwuAXI3X1Pc"
+      OAUTH2_PROXY_COOKIE_SECRET: "4rNnjIldN3S3ksWg6NxiWDkLkZZ9DHp7VxH3xR3T0jI="
+      OAUTH2_PROXY_OIDC_ISSUER_URL: "https://hlt-fhir.eu.auth0.com/"
+      OAUTH2_PROXY_REDIRECT_URL: "http://localhost:8080/oauth2/callback"
+      OAUTH2_PROXY_UPSTREAMS: "http://hapi-fhir-jpaserver-start:8080"
+      OAUTH2_PROXY_COOKIE_NAME: "_oauth2_proxy"
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_COOKIE_SECURE: "false"           # <--- For local HTTP testing only
+
   hapi-fhir-jpaserver-start:
     build: .
     container_name: hapi-fhir-jpaserver-start
@@ -9,8 +32,9 @@ services:
       SPRING_DATASOURCE_USERNAME: "admin"
       SPRING_DATASOURCE_PASSWORD: "admin"
       SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+
   hapi-fhir-postgres:
     image: postgres:15-alpine
     container_name: hapi-fhir-postgres
@@ -21,5 +45,6 @@ services:
       POSTGRES_PASSWORD: "admin"
     volumes:
       - hapi-fhir-postgres:/var/lib/postgresql/data
+
 volumes:
   hapi-fhir-postgres:
