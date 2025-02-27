@@ -19,25 +19,34 @@ public class ApiKeyAuthInterceptor {
 
 	private static final Logger logger = LoggerFactory.getLogger(ApiKeyAuthInterceptor.class);
 
-	@Value("${HAPI_FHIR_API_KEY:}")
+	@Value("${API_KEY:secure_api_key_for_etl_service}")
 	private String apiKey;
 
 	/**
 	 * Intercepts incoming requests before processing
 	 */
 	@Hook(Pointcut.SERVER_INCOMING_REQUEST_PRE_PROCESSED)
-	public void authenticate(RequestDetails requestDetails) {
-		// Skip authentication if no API key is configured
-		if (apiKey == null || apiKey.isEmpty()) {
+	public void authenticate(RequestDetails requestDetails, HttpServletRequest request) {
+		// Safety check for null values
+		if (requestDetails == null || apiKey == null || apiKey.isEmpty() || request == null) {
 			return;
 		}
 
-		// Safety check for null requestDetails
-		if (requestDetails == null) {
+		// Check if this is a direct API access on port 9090
+		int serverPort = request.getServerPort();
+		boolean isDirectApiAccess = serverPort == 9090;
+
+		// For direct API access on port 9090, API key is always required
+		if (isDirectApiAccess) {
+			String apiKeyHeader = requestDetails.getHeader("X-API-KEY");
+			if (apiKeyHeader == null || !apiKeyHeader.equals(apiKey)) {
+				logger.warn("Unauthorized access attempt on port 9090 from IP: {}", request.getRemoteAddr());
+				throw new AuthenticationException("Access denied. Valid API key required.");
+			}
 			return;
 		}
 
-		// Check if request is coming through OAuth proxy
+		// For port 8080 (oauth flow), check if request is coming through OAuth proxy
 		String forwardedFor = requestDetails.getHeader("X-Forwarded-For");
 		String proxyAuth = requestDetails.getHeader("X-Auth-Request-User");
 
@@ -46,7 +55,7 @@ public class ApiKeyAuthInterceptor {
 			return;
 		}
 
-		// Direct access requires API key
+		// Fall back to API key for non-OAuth flows
 		String apiKeyHeader = requestDetails.getHeader("X-API-KEY");
 		if (apiKeyHeader == null || !apiKeyHeader.equals(apiKey)) {
 			throw new AuthenticationException("Invalid or missing API key");
@@ -60,7 +69,7 @@ public class ApiKeyAuthInterceptor {
 	@Hook(Pointcut.SERVER_INCOMING_REQUEST_POST_PROCESSED)
 	public void authenticateHttpLevel(HttpServletRequest theRequest, HttpServletResponse theResponse) {
 		// Skip authentication if no API key is configured
-		if (apiKey == null || apiKey.isEmpty()) {
+		if (apiKey == null || apiKey.isEmpty() || theRequest == null) {
 			return;
 		}
 
@@ -73,7 +82,27 @@ public class ApiKeyAuthInterceptor {
 			return;
 		}
 
-		// Check if request is coming through OAuth proxy
+		// Check if this is a direct API access on port 9090
+		int serverPort = theRequest.getServerPort();
+		boolean isDirectApiAccess = serverPort == 9090;
+
+		// For direct API access on port 9090, API key is always required
+		if (isDirectApiAccess) {
+			String apiKeyHeader = theRequest.getHeader("X-API-KEY");
+			if (apiKeyHeader == null || !apiKeyHeader.equals(apiKey)) {
+				// Set unauthorized status
+				theResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+				try {
+					theResponse.getWriter().write("Access denied. Valid API key required.");
+					theResponse.getWriter().flush();
+				} catch (Exception e) {
+					logger.error("Error writing unauthorized response", e);
+				}
+			}
+			return;
+		}
+
+		// For port 8080 (oauth flow), check if request is coming through OAuth proxy
 		String forwardedFor = theRequest.getHeader("X-Forwarded-For");
 		String proxyAuth = theRequest.getHeader("X-Auth-Request-User");
 
@@ -82,13 +111,17 @@ public class ApiKeyAuthInterceptor {
 			return;
 		}
 
-		// Direct access requires API key
+		// Fall back to API key check for other requests
 		String apiKeyHeader = theRequest.getHeader("X-API-KEY");
 		if (apiKeyHeader == null || !apiKeyHeader.equals(apiKey)) {
-			// We can't throw an exception here as it won't be properly caught
-			// But we've already authenticated in the previous hook for FHIR operations
-			// This is just a safety net for requests that bypass the normal FHIR processing
-			logger.debug("Request without valid API key to: {}", requestURI);
+			// We can't throw an exception here, but we can set HTTP status
+			theResponse.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+			try {
+				theResponse.getWriter().write("Invalid or missing API key");
+				theResponse.getWriter().flush();
+			} catch (Exception e) {
+				logger.error("Error writing unauthorized response", e);
+			}
 		}
 	}
 }

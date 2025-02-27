@@ -1,27 +1,42 @@
 #!/bin/bash
 
-echo "Cleaning up Docker resources..."
+set -e
 
-# Stop any running containers (optional, uncomment if needed)
-# docker-compose down
+echo "Starting Docker cleanup process..."
 
-# Remove unused containers, networks, images and volumes
+# Stop running containers from the current directory
+if [ -f docker-compose.yml ]; then
+  echo "Stopping containers defined in docker-compose.yml..."
+  docker-compose down --remove-orphans
+else
+  echo "No docker-compose.yml found in current directory, skipping container shutdown."
+fi
+
+# Free up disk space by removing unused Docker resources
 echo "Pruning unused Docker resources..."
 docker system prune -f
 
-# Remove dangling images (images with <none> tag)
+# Remove all dangling images (images with <none> tag)
 echo "Removing dangling images..."
 docker image prune -f
 
 # Remove unused volumes
-echo "Pruning volumes..."
+echo "Pruning volumes (except named volumes that are still in use)..."
 docker volume prune -f
 
-# Show remaining disk space
-echo "Current disk space:"
-df -h
+# Remove unused networks
+echo "Pruning networks..."
+docker network prune -f
 
-echo "Docker cleanup completed."
-echo "Now you can rebuild with: docker-compose up -d --build"
+# Display Docker resource usage after cleanup
+echo "Current Docker disk usage after cleanup:"
+docker system df
+
+# Show remaining disk space
+echo "Current system disk space:"
+df -h | grep -E '(Filesystem|/dev/|tmpfs)'
+
+echo "Docker cleanup completed successfully."
+echo "You can now rebuild containers with: docker-compose up -d --build"
 
 # Make the script executable after saving with: chmod +x docker-cleanup.sh

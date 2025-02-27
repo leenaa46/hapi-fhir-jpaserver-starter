@@ -11,7 +11,8 @@ This server uses a dual authentication approach:
 
 2. **API Key Authentication** (port 9090):
    - Direct access for ETL services and automated systems
-   - Requires `X-API-KEY` header with the configured API key
+   - **REQUIRES** `X-API-KEY` header with the valid API key
+   - All requests without valid API key will be rejected
    - No OAuth flow required
 
 ## How to Access the API

@@ -1,14 +1,14 @@
-version: "3"
+version: "3.8"
 
 services:
   auth-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:latest
     container_name: oauth2-proxy
     restart: on-failure
-
+    depends_on:
+      - hapi-fhir-jpaserver-start
     ports:
       - "8080:4180"
-
     environment:
       OAUTH2_PROXY_PROVIDER: "oidc"
       OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
@@ -23,22 +23,40 @@ services:
       OAUTH2_PROXY_COOKIE_SECURE: "false"
       # Skip auth for API endpoints
       OAUTH2_PROXY_SKIP_AUTH_ROUTES: "/fhir/api/.*"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4180/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   hapi-fhir-jpaserver-start:
     build: .
     container_name: hapi-fhir-jpaserver-start
     restart: on-failure
+    depends_on:
+      - hapi-fhir-postgres
     environment:
       SPRING_DATASOURCE_URL: "jdbc:postgresql://hapi-fhir-postgres:5432/hapi"
       SPRING_DATASOURCE_USERNAME: "${DB_USERNAME}"
       SPRING_DATASOURCE_PASSWORD: "${DB_PASSWORD}"
       SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
-      HAPI_FHIR_API_KEY: "${API_KEY}"
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
+      API_KEY: "${API_KEY}"
+      # Configure Java memory options via the environment
+      JAVA_TOOL_OPTIONS: "-Xmx2g"
+      # Enable OpenTelemetry agent
+      JAVA_OPTS: "-javaagent:/app/opentelemetry-javaagent.jar"
     expose:
       - "8080"
     # Add direct port for API access (ETL service)
     ports:
       - "9090:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/fhir/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   hapi-fhir-postgres:
     image: postgres:15-alpine
@@ -50,6 +68,11 @@ services:
       POSTGRES_PASSWORD: "${DB_PASSWORD}"
     volumes:
       - hapi-fhir-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d hapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   hapi-fhir-postgres:
