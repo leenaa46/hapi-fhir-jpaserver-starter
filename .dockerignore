@@ -1,12 +1,35 @@
-target/classes/
-target/failsafe-reports/
-target/generated-*
-target/maven-*
-target/ROOT
-target/test-classes/
-target/war
-target/duplicate-finder-result.xml
-target/jacoco.exec
-target/*.original
-.idea
-.git
+# Maven
+target/
+!target/ROOT.war
+*.jar
+*.war
+*.ear
+*.class
+.mtj.tmp/
+.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+logs/
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+docker-compose.yml
