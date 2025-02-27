@@ -21,6 +21,8 @@ services:
       OAUTH2_PROXY_COOKIE_NAME: "_oauth2_proxy"
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
       OAUTH2_PROXY_COOKIE_SECURE: "false"
+      # Skip auth for API endpoints
+      OAUTH2_PROXY_SKIP_AUTH_ROUTES: "/fhir/api/.*"
 
   hapi-fhir-jpaserver-start:
     build: .
@@ -31,8 +33,12 @@ services:
       SPRING_DATASOURCE_USERNAME: "${DB_USERNAME}"
       SPRING_DATASOURCE_PASSWORD: "${DB_PASSWORD}"
       SPRING_DATASOURCE_DRIVERCLASSNAME: "org.postgresql.Driver"
+      HAPI_FHIR_API_KEY: "${API_KEY}"
     expose:
       - "8080"
+    # Add direct port for API access (ETL service)
+    ports:
+      - "9090:8080"
 
   hapi-fhir-postgres:
     image: postgres:15-alpine
